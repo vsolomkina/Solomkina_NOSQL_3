@@ -1,0 +1,59 @@
+// Запит 1. Знайти всі фільми жанру «Thriller» із середнім рейтингом вище 4.0:
+
+
+MATCH (m:Movie)-[:BELONGS_TO]->(g:Genre {name: 'Thriller'})
+MATCH (m)<-[r:RATED]-()
+WITH m, avg(r.rating) AS AvgRating
+WHERE AvgRating > 4.0
+RETURN m.title AS MovieTitle, AvgRating
+ORDER BY AvgRating DESC;
+
+// Запит 2. Знайти користувачів, які поставили оцінку 5 більш ніж 50 фільмам
+
+MATCH (u:User)-[r:RATED]->(:Movie)
+WHERE r.rating = 5
+WITH u, count(r) AS FiveStarCount
+WHERE FiveStarCount > 50
+RETURN u.userId AS UserID, u.gender AS Gender, u.age AS Age, FiveStarCount
+ORDER BY FiveStarCount DESC;
+
+// Запит 3. Знайти фільми, які обидва користувачі (наприклад, userId=1 і userId=2) оцінили високо (рейтинг ≥ 4)
+
+MATCH (u1:User {userId: 1})-[r1:RATED]->(m:Movie)<-[r2:RATED]-(u2:User {userId: 2})
+WHERE r1.rating >= 4 AND r2.rating >= 4
+RETURN m.title AS SharedMovie, r1.rating AS User1Rating, r2.rating AS User2Rating;
+
+// Запит 4. Знайти жанри, чиї фільми стабільно отримують високі оцінки — середній рейтинг і кількість оцінок
+
+MATCH (g:Genre)<-[:BELONGS_TO]-(m:Movie)<-[r:RATED]-()
+WITH g, avg(r.rating) AS GenreAvgRating, count(r) AS TotalRatings
+WHERE TotalRatings > 5000 // Фільтруємо занадто рідкісні жанри
+RETURN g.name AS Genre, GenreAvgRating, TotalRatings
+ORDER BY GenreAvgRating DESC;
+
+// Запит 5. Рекомендація «користувачі зі схожими смаками також дивилися»: для заданого користувача знайти фільми, які він ще не дивився, але високо оцінили користувачі з подібними смаками
+
+// Крок 1: Знаходимо користувача та його улюблені фільми (оцінка >= 4)
+MATCH (u:User {userId: 1})-[r1:RATED]->(m1:Movie)
+WHERE r1.rating >= 4
+
+// Крок 2: Знаходимо інших людей (однодумців), які теж люблять ці фільми
+MATCH (m1)<-[r2:RATED]-(peer:User)
+WHERE r2.rating >= 4 AND u <> peer
+
+// Крок 3: Дивимось, що ще крутого дивилися ці однодумці
+MATCH (peer)-[r3:RATED]->(recommendedMovie:Movie)
+WHERE r3.rating >= 4
+
+// Крок 4: Прибираємо фільми, які наш користувач вже сам бачив
+AND NOT EXISTS { MATCH (u)-[:RATED]->(recommendedMovie) }
+
+// Крок 5: Сортуємо за тим, скільки людей порадили цей фільм та яка середня оцінка
+RETURN recommendedMovie.title AS RecommendedMovie, count(DISTINCT peer) AS RecommendedByUsers, avg(r3.rating) AS AvgPeerRating
+ORDER BY RecommendedByUsers DESC, AvgPeerRating DESC
+LIMIT 10;
+
+// Запит 6. Знайти найкоротший ланцюжок зв’язку між двома користувачами через спільні фільми
+
+MATCH p = shortestPath((u1:User {userId: 1})-[:RATED*..10]-(u2:User {userId: 2}))
+RETURN p;
